@@ -1,5 +1,5 @@
 ---
-layout: post
+layout: default
 title: Engineering the Sieve of Eratosthenes
 ---
 
