@@ -12,7 +12,7 @@ Such an optimized version can then be used as a baseline for *fair* comparisons 
 ## Textbook Variant
 
 We start with the textbook implementation shown below.
-Vector `sieve` contains `N + 1` boolean values and after running the algorithm the value at index `i` indicated whether $i$ is a prime number.
+Vector `sieve` contains `N + 1` boolean values and after running the algorithm the value at index `i` indicated whether \(i\) is a prime number.
 ```c++
 std::vector<bool> sieve(N + 1, true);
 sieve[0] = sieve[1] = false;
@@ -26,9 +26,9 @@ for (uint64_t i = 2; i * i <= N; ++i) { // (1)
 
 ```
 There are already two non-trivial optimizations in above code.
-Firstly, in line (1) index `i` only runs up to $\sqrt(N)$ instead of $N$.
-This is correct, because every number up to $N$ is either a prime number or has a prime factor no bigger than $\sqrt(N)$.
-Secondly, index `j` in line (2) starts at $i^2$ as all smaller multiples of $i$ have a prime factor below $i$ and are therefore already cleared form the sieve.
+Firstly, in line (1) index `i` only runs up to \(\sqrt(N)\) instead of \(N\).
+This is correct, because every number up to \(N\) is either a prime number or has a prime factor no bigger than \(\sqrt(N)\).
+Secondly, index `j` in line (2) starts at \(i^2\) as all smaller multiples of \(i\) have a prime factor below \(i\) and are therefore already cleared form the sieve.
 
 ## Even more?
 Is it possible to get even faster?
