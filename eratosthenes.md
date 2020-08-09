@@ -16,7 +16,11 @@ In a last step we change the order of the remaining operations to effectively us
 ## Textbook Variant
 
 We start with the textbook implementation shown below.
-Vector `sieve` contains $N + 1$ boolean values and after running the algorithm the value at index $i$ indicates whether $i$ is a prime number.
+The idea is simple:
+Vector `sieve` contains $N + 1$ boolean values, one for each element $i \in \{0, \ldots, N\}$ and the element at index $i$ shall indicate whether $i$ is a prime number.
+Initially all elements of `sieve` are set to `true`, except for for $i=0$ and $i=1$ which we know are not prime.
+Now we loop through `sieve` starting at $i = 2$
+Whenever `sieve[i]` is `true`, $i$ must be a prime number and we set `sieve[j]` to `false` for all strict multiples $j$ of $i$.
 ```c++
 std::vector<bool> sieve;
 
@@ -45,47 +49,112 @@ Most time is spent erasing composites from the sieve and we will see next how to
 
 ### Compressing the Sieve
 
-The three smallest prime numbers are $2$, $3$ and $5$ and the first step is to set all their strict multiples to `false` in the sieve.
-We notice that there is a periodic patter in the numbers set to `false` with a period length of $30 = 2 \cdot 3 \cdot 5$:
+The three smallest prime numbers are $2$, $3$ and $5$ and the first step in the Sieve of Eratosthenes is to set all their strict multiples to `false` in the sieve.
+We notice that there is a periodic pattern in the numbers set to `false` with a period length of $30 = 2 \cdot 3 \cdot 5$:
 The only numbers remaining as prime number candidates are the ones with remainder $1$, $7$, $11$, $13$, $17$, $19$, $23$ or $29$ modulo $30$.
-All others are definitely composites (except for $2$, $3$ and $5$ themselves) so we do not need to store them in the sieve at all.
-For any block of $30$ consecutive numbers we therefore only need $8$ bits (so one byte) of memory.
+All others are definitely composites (except for $2$, $3$ and $5$ themselves).
+Our first optimization is therefore to not store them in the sieve at all:
+For any block of $30$ consecutive numbers we use only $8$ bits (so one byte) of memory.
 
-This immediately saves around $\frac{22}{30}$ of the memory needed, but at the cost of the additional complexity introduced by only storing some values in the sieve.
+This saves around $\frac{22}{30}$ of the memory needed, but at the cost of the additional complexity introduced by storing only some values in the sieve.
 We are now going to see how to implement this efficiently.
-Starting at a value with remainder $1$ modulo $30$ the steps between any two remaining candidates form the periodic sequence $\{6,4,2,4,2,4,6,2\}$.
-We can use this to optimize the outer loop by increasing $i$ always by the correct amount.
-The functions `read_value` and `clear_bit` below read and clear a bit in the compressed sieve.
+Assume we are at position $i$ in the outer loop and $i \equiv 1 \mod 30$.
+Then the next value of $i$ we are interested in is $i + 6 \equiv 7 \mod 30$, so we increase $i$ by $6$.
+Similarly for $i \equiv 7 \mod 30$ the next value we are interested in is $i + 4 \equiv 11 \mod 30$, so we increase $i$ by $4$.
+Let us define a constant array `OFFSETS[8] = {6, 4, 2, 4, 2, 4, 6, 2}` storing the amount to increase $i$ by for each of the possible remainders $1$, $7$, $11$, $13$, $17$, $19$, $23$ and $29$, respectively.
+The functions `read_bit` and `clear_bit` below read and clear a bit in the compressed sieve.
 We go into detail later on how to implement them.
 ```c++
-std::vector<bool> sieve;
+std::vector<uint8_t> sieve;
+const uint8_t ALL_ONE = 0xFF;
 const uint8_t OFFSETS[8] = {6, 4, 2, 4, 2, 4, 6, 2};
 const uint64_t NUMBERS_PER_BYTE = 2 * 3 * 5;
 
 void eratosthenes(uint64_t N) {
   const uint64_t M = (N + NUMBERS_PER_BYTE - 1) / NUMBERS_PER_BYTE; // (1)
-  sieve.assign(M, true);
+  sieve.assign(M, ALL_ONE);
   
   for (uint64_t i = 7, o = 1; i * i <= N; i += OFFSETS[o++ % 8]) { // (2)
-    if (read_value(i)) {
+    if (read_bit(i)) {
       for (uint64_t j = i * i; j <= N; j += i) {
         clear_bit(j);
       }
     }
   }
 }
-```
-Line (1) computes the size of the compressed sieve, which is $\lceil \frac{N}{2 \cdot 3 \cdot 5} \rceil$.
-In line (2) we changed two things:
-Firstly we now start at $i = 7$ which is the first prime bigger than $5$.
-Secondly we changed the way $i$ is increased between two loop iterations.
-Instead of incrementing it in every step, we jump right to the next number having a remainder in $\{1,7,11,3,17,19,23,29\}$ modulo $30$.
-How far we need to jump is stored in the array `OFFSETS` and the new loop variable $o$ points to the correct index inside this array.
-As we start with $i = 7$, we initialize it as $o = 1$.
 
-### Optimize Inner Loop: Skip Multiples of $2$, $3$ and $5$
+bool is_prime(uint64_t n) { // (3)
+  if (n == 0 || n == 1 || n == 4) return false;
+  if (n == 2 || n == 3 || n == 5) return true;
+  return read_bit(i);
+}
+```
+Line (1) computes the size of the compressed sieve, which is $\left\lceil \frac{N}{2 \cdot 3 \cdot 5} \right\rceil$.
+In line (2) we changed two things:
+Firstly, we now start at $i = 7$ which is the first prime bigger than $5$.
+Secondly, we changed the way $i$ is increased between two loop iterations.
+Instead of incrementing it in every step, we jump right to the next number having a remainder in $\{1,7,11,3,17,19,23,29\}$ modulo $30$ using our `OFFSETS` array.
+The new loop variable $o$ points to the correct index inside this array and is initialized with $o = 1$, as $i \equiv 7 \mod 30$.
+
+At last we also need an `is_prime` function defined in line (3), as we can no longer just look at index $i$ for number $i$ in the `sieve` array.
+It takes special care of the small values and calles `read_bit` for the bigger ones.
+
+All of the complexity is now in the `read_bit` and `clear_bit` functions.
+Here is two **very naive** implementations:
+```c++
+bool read_bit(uint64_t n) {
+  const uint64_t idx = n / NUMBERS_PER_BYTE;
+  if (n % NUMBERS_PER_BYTE == 1) return sieve[idx] & 1;
+  if (n % NUMBERS_PER_BYTE == 7) return sieve[idx] & (1 << 1);
+  if (n % NUMBERS_PER_BYTE == 11) return sieve[idx] & (1 << 2);
+  if (n % NUMBERS_PER_BYTE == 13) return sieve[idx] & (1 << 3);
+  if (n % NUMBERS_PER_BYTE == 17) return sieve[idx] & (1 << 4);
+  if (n % NUMBERS_PER_BYTE == 19) return sieve[idx] & (1 << 5);
+  if (n % NUMBERS_PER_BYTE == 23) return sieve[idx] & (1 << 6);
+  if (n % NUMBERS_PER_BYTE == 29) return sieve[idx] & (1 << 7);
+  return false;
+}
+
+void clear_bit(uint64_t n) {
+  const uint64_t idx = n / NUMBERS_PER_BYTE;
+  if (n % NUMBERS_PER_BYTE == 1) sieve[idx] &= ~1;
+  if (n % NUMBERS_PER_BYTE == 7) sieve[idx] &= ~(1 << 1);
+  if (n % NUMBERS_PER_BYTE == 11) sieve[idx] &= ~(1 << 2);
+  if (n % NUMBERS_PER_BYTE == 13) sieve[idx] &= ~(1 << 3);
+  if (n % NUMBERS_PER_BYTE == 17) sieve[idx] &= ~(1 << 4);
+  if (n % NUMBERS_PER_BYTE == 19) sieve[idx] &= ~(1 << 5);
+  if (n % NUMBERS_PER_BYTE == 23) sieve[idx] &= ~(1 << 6);
+  if (n % NUMBERS_PER_BYTE == 29) sieve[idx] &= ~(1 << 7);
+}
+```
+
+Implementing them naivley and measuring above code yields very disappointing results:
+For $N=10^9$ the sieve now takes $27$ seconds, so three times slower than the textbook variant.
+This is mainly due to the poor implementations of `read_bit` and `clear_bit`, so let us focus on them next.
 
 ### Operations on the Compressed Sieve: Avoiding Conditional Jumps
+Each call to `read_bit` or `clear_bit` executes up to eight `if` statements.
+As we can see on (Compiler Explorer)[https://godbolt.org/z/qG6nE3] the generated assembly contains many conditional jumps, whose results the compiler can hardly predict.
+This leads to many pipeline flushes and thus the slow exectuion time.
+Luckily, the operation done after each of the eight `if` statements is of the same structure.
+In fact, we can eliminate all those `if`'s completely:
+```c++
+const uint8_t MASK[30] = {
+    0, 0x80, 0,    0, 0, 0, 0, 0x40, 0,    0,
+    0, 0x20, 0, 0x10, 0, 0, 0, 0x08, 0, 0x04,
+    0,    0, 0, 0x02, 0, 0, 0,    0, 0, 0x01};
+
+bool read_bit(uint64_t n) {
+  return sieve[n / NUMBERS_PER_BYTE] & MASK[n % NUMBERS_PER_BYTE];
+}
+
+void clear_bit(uint64_t n) {
+  sieve[n / NUMBERS_PER_BYTE] &= ~MASK[n % NUMBERS_PER_BYTE];
+}
+```
+Now each call only executes a division, a modulo operation and one or two bit operations.
+
+### Optimize Inner Loop: Skip Multiples of $2$, $3$ and $5$
 
 ## Cache Optimization
 
