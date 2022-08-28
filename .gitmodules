@@ -1,0 +1,3 @@
+[submodule "mortalCoil"]
+	path = mortalCoil
+	url = https://github.com/pjungeblut/mortalCoil.git
